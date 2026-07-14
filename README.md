@@ -4,7 +4,7 @@ Agente de inteligencia artificial que responde preguntas en lenguaje natural
 sobre documentos internos de una empresa (PDF), usando una arquitectura de
 **RAG (Retrieval Augmented Generation)**.
 
-## 🧱 Arquitectura
+##  Arquitectura
 
 ```
  ┌──────────────┐     ┌────────────────┐     ┌───────────────────┐
@@ -39,7 +39,7 @@ sobre documentos internos de una empresa (PDF), usando una arquitectura de
    envían junto con la pregunta al modelo **Gemini 1.5 Flash**, que genera
    la respuesta final en lenguaje natural.
 
-## 🛠️ Tecnologías
+## Tecnologías
 
 - Python 3.10+
 - LangChain
@@ -47,7 +47,7 @@ sobre documentos internos de una empresa (PDF), usando una arquitectura de
 - FAISS (base vectorial local)
 - Google Gemini (`gemini-1.5-flash` + `embedding-001`)
 
-## 🚀 Cómo ejecutarlo
+##  Cómo ejecutarlo
 
 1. **Clonar el repositorio y crear un entorno virtual**
    ```bash
@@ -83,7 +83,7 @@ sobre documentos internos de una empresa (PDF), usando una arquitectura de
    python agent.py
    ```
 
-## 💬 Ejemplos de preguntas y respuestas
+## Ejemplos de preguntas y respuestas
 
 > **Pregunta:** ¿Cuántos días de vacaciones corresponden por año según la política interna?
 > **Agente:** Según el documento, los colaboradores tienen derecho a 15 días hábiles de vacaciones por año trabajado. 📎 Fuente: página 4
@@ -96,13 +96,13 @@ sobre documentos internos de una empresa (PDF), usando una arquitectura de
 
 *(Reemplaza estos ejemplos por preguntas y respuestas reales de tu propio documento antes de entregar el proyecto).*
 
-## ☁️ Despliegue en OCI (Etapa 3)
+##  Despliegue en OCI (Etapa 3)
 
 > Pendiente de completar tras el deploy: agregar aquí el enlace público o
 > una captura de pantalla de la aplicación corriendo en Oracle Cloud
 > Infrastructure (OCI Compute).
 
-## 📁 Estructura del proyecto
+## Estructura del proyecto
 
 ```
 alura-agente/
