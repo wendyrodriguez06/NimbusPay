@@ -332,10 +332,10 @@ with st.sidebar:
     )
     st.divider()
 
-    st.markdown("### 📄 Documento")
+    st.markdown("###  Documento")
 
     if not os.getenv("GOOGLE_API_KEY"):
-        st.error("⚠️ No se encontró GOOGLE_API_KEY en tu archivo .env")
+        st.error(" No se encontró GOOGLE_API_KEY en tu archivo .env")
 
     existing_pdfs = sorted([p.name for p in DATA_DIR.glob("*.pdf")])
 
@@ -346,10 +346,16 @@ with st.sidebar:
             f.write(uploaded_file.getbuffer())
         st.success(f"Guardado: {uploaded_file.name}")
         existing_pdfs = sorted([p.name for p in DATA_DIR.glob("*.pdf")])
+        # Autoseleccionar el archivo recién subido en el desplegable
+        st.session_state["pdf_select"] = uploaded_file.name
+
+    if existing_pdfs and st.session_state.get("pdf_select") not in existing_pdfs:
+        st.session_state["pdf_select"] = existing_pdfs[0]
 
     selected_pdf = st.selectbox(
         "O elige uno ya existente en `data/`",
         options=existing_pdfs if existing_pdfs else ["(sin documentos)"],
+        key="pdf_select",
     )
 
     process_btn = st.button("⚙️ Procesar documento", use_container_width=True)
@@ -361,10 +367,10 @@ with st.sidebar:
             st.session_state["vectorstore"] = vs
             st.session_state["chain"] = get_qa_chain(vs)
             st.session_state["messages"] = []
-        st.success("✅ Base de conocimiento lista")
+        st.success("Base de conocimiento lista")
 
     st.divider()
-    if st.button("🗑️ Reiniciar conversación", use_container_width=True):
+    if st.button(" Reiniciar conversación", use_container_width=True):
         st.session_state["messages"] = []
         st.rerun()
 
