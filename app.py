@@ -276,15 +276,21 @@ st.markdown(DARK_THEME if st.session_state["theme"] == "dark" else LIGHT_THEME, 
 # Funciones auxiliares
 # ----------------------------------------------------------------------
 @st.cache_resource(show_spinner=False)
-def build_vectorstore(pdf_path: str):
-    loader = PyPDFLoader(pdf_path)
-    documents = loader.load()
-
+def build_vectorstore(pdf_paths: tuple):
+    all_chunks = []
     splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
-    chunks = splitter.split_documents(documents)
+
+    for pdf_path in pdf_paths:
+        loader = PyPDFLoader(pdf_path)
+        documents = loader.load()
+        # Etiquetamos cada fragmento con el nombre del archivo de origen
+        chunks = splitter.split_documents(documents)
+        for chunk in chunks:
+            chunk.metadata["source_file"] = Path(pdf_path).name
+        all_chunks.extend(chunks)
 
     embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-001")
-    vectorstore = FAISS.from_documents(chunks, embeddings)
+    vectorstore = FAISS.from_documents(all_chunks, embeddings)
     vectorstore.save_local(VECTORSTORE_PATH)
     return vectorstore
 
@@ -332,10 +338,10 @@ with st.sidebar:
     )
     st.divider()
 
-    st.markdown("###  Documento")
+    st.markdown("### 📄 Documento")
 
     if not os.getenv("GOOGLE_API_KEY"):
-        st.error(" No se encontró GOOGLE_API_KEY en tu archivo .env")
+        st.error("⚠️ No se encontró GOOGLE_API_KEY en tu archivo .env")
 
     existing_pdfs = sorted([p.name for p in DATA_DIR.glob("*.pdf")])
 
@@ -346,31 +352,44 @@ with st.sidebar:
             f.write(uploaded_file.getbuffer())
         st.success(f"Guardado: {uploaded_file.name}")
         existing_pdfs = sorted([p.name for p in DATA_DIR.glob("*.pdf")])
-        # Autoseleccionar el archivo recién subido en el desplegable
-        st.session_state["pdf_select"] = uploaded_file.name
+        # Selecciona automáticamente TODOS los documentos, incluido el nuevo
+        st.session_state["pdf_select"] = existing_pdfs
 
-    if existing_pdfs and st.session_state.get("pdf_select") not in existing_pdfs:
-        st.session_state["pdf_select"] = existing_pdfs[0]
+    if "pdf_select" not in st.session_state:
+        st.session_state["pdf_select"] = existing_pdfs
+    else:
+        # Quita de la selección guardada archivos que ya no existen
+        st.session_state["pdf_select"] = [
+            p for p in st.session_state["pdf_select"] if p in existing_pdfs
+        ]
 
-    selected_pdf = st.selectbox(
-        "O elige uno ya existente en `data/`",
-        options=existing_pdfs if existing_pdfs else ["(sin documentos)"],
+    selected_pdfs = st.multiselect(
+        "Documentos a incluir en la base de conocimiento",
+        options=existing_pdfs,
         key="pdf_select",
+        help="El agente responderá usando el contenido combinado de todos los documentos que marques aquí.",
     )
 
-    process_btn = st.button("⚙️ Procesar documento", use_container_width=True)
+    process_btn = st.button("⚙️ Procesar documento(s)", use_container_width=True)
 
-    if process_btn and existing_pdfs:
-        with st.spinner("Leyendo, fragmentando y generando embeddings..."):
+    if process_btn and selected_pdfs:
+        with st.spinner(f"Leyendo {len(selected_pdfs)} documento(s), fragmentando y generando embeddings..."):
             build_vectorstore.clear()
-            vs = build_vectorstore(str(DATA_DIR / selected_pdf))
+            pdf_paths = tuple(sorted(str(DATA_DIR / name) for name in selected_pdfs))
+            vs = build_vectorstore(pdf_paths)
             st.session_state["vectorstore"] = vs
             st.session_state["chain"] = get_qa_chain(vs)
+            st.session_state["loaded_docs"] = selected_pdfs
             st.session_state["messages"] = []
-        st.success("Base de conocimiento lista")
+        st.success(f"✅ Base de conocimiento lista con {len(selected_pdfs)} documento(s)")
+    elif process_btn and not selected_pdfs:
+        st.warning("Selecciona al menos un documento antes de procesar.")
+
+    if st.session_state.get("loaded_docs"):
+        st.caption("📚 Base de conocimiento actual: " + ", ".join(st.session_state["loaded_docs"]))
 
     st.divider()
-    if st.button(" Reiniciar conversación", use_container_width=True):
+    if st.button("🗑️ Reiniciar conversación", use_container_width=True):
         st.session_state["messages"] = []
         st.rerun()
 
@@ -433,15 +452,15 @@ st.markdown(
 )
 
 if st.session_state["chain"] is None:
-    st.info("👈 Sube o selecciona un PDF en la barra lateral y dale a **Procesar documento** para comenzar.")
+    st.info("👈 Sube o selecciona uno o varios PDF en la barra lateral y dale a **Procesar documento(s)** para comenzar.")
 else:
     # Mostrar historial
     for msg in st.session_state["messages"]:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
-            if msg.get("pages"):
+            if msg.get("sources"):
                 st.markdown(
-                    f'<span class="source-tag">📎 Página(s): {msg["pages"]}</span>',
+                    f'<span class="source-tag">📎 {msg["sources"]}</span>',
                     unsafe_allow_html=True,
                 )
 
@@ -456,15 +475,22 @@ else:
             with st.spinner("Pensando..."):
                 result = st.session_state["chain"].invoke({"query": question})
                 answer = result["result"]
-                pages = sorted(
-                    {doc.metadata.get("page", "?") for doc in result["source_documents"]}
+                # Agrupamos página(s) por archivo de origen, ej: "brief.pdf (pág. 1, 3)"
+                by_file = {}
+                for doc in result["source_documents"]:
+                    fname = doc.metadata.get("source_file", "documento")
+                    page = doc.metadata.get("page", "?")
+                    by_file.setdefault(fname, set()).add(page)
+                sources = " · ".join(
+                    f"{fname} (pág. {', '.join(str(p) for p in sorted(pages))})"
+                    for fname, pages in by_file.items()
                 )
             st.markdown(answer)
             st.markdown(
-                f'<span class="source-tag">📎 Página(s): {pages}</span>',
+                f'<span class="source-tag">📎 {sources}</span>',
                 unsafe_allow_html=True,
             )
 
         st.session_state["messages"].append(
-            {"role": "assistant", "content": answer, "pages": pages}
+            {"role": "assistant", "content": answer, "sources": sources}
         )
